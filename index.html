@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>จำลองเสาอากาศทีวีดิจิทัลไทย (DVB-T2)</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mut:#64707f;--ln:#d8dde4;--ac:#1f6feb;--wn:#b45309;--ok:#15803d;--bad:#b91c1c;--grid:#cfd5dd}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161c;--card:#1b212a;--tx:#e8ecf1;--mut:#97a3b2;--ln:#2d3541;--ac:#58a6ff;--wn:#f0b35a;--ok:#4ade80;--bad:#f87171;--grid:#2d3541}}
+:root[data-theme="dark"]{--bg:#12161c;--card:#1b212a;--tx:#e8ecf1;--mut:#97a3b2;--ln:#2d3541;--ac:#58a6ff;--wn:#f0b35a;--ok:#4ade80;--bad:#f87171;--grid:#2d3541}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;font-size:15px}
+main{max-width:560px;margin:0 auto;padding:14px}
+h1{font-size:18px;margin:4px 0 4px}
+h2{font-size:14px;margin:0 0 8px;color:var(--mut);font-weight:600}
+.sub{color:var(--mut);font-size:12px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:12px;margin-bottom:12px}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.row label{flex:0 0 112px;color:var(--mut);font-size:13px}
+.row .u{flex:0 0 44px;color:var(--mut);font-size:13px}
+input,select{background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:8px;padding:8px;font-size:15px;min-width:0;flex:1}
+input[type=range]{padding:0;accent-color:var(--ac);width:100%}
+canvas{width:100%;height:auto;display:block}
+.big{font-size:22px;font-weight:600;color:var(--ac)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px}
+.grid span{display:block;color:var(--mut);font-size:12px}
+table{border-collapse:collapse;font-size:13px;width:100%}
+td,th{border-bottom:1px solid var(--ln);padding:5px 6px;text-align:right}
+th:first-child,td:first-child{text-align:left}
+.scroll{overflow-x:auto}
+.status{font-size:16px;font-weight:600;margin:6px 0}
+.note{color:var(--mut);font-size:12px;line-height:1.5}
+</style>
+</head>
+<body>
+<main>
+<h1>📺 จำลองเสาอากาศทีวีดิจิทัลไทย</h1>
+<div class="sub">เสา Yagi-Uda แนวนอน สำหรับรับ DVB-T2 ย่าน UHF (8 MHz/ช่อง) แบบจำลองโดยประมาณ</div>
+
+<div class="card">
+  <h2>ตั้งค่า</h2>
+  <div class="row"><label>จำนวนก้านเสา</label><input id="N" type="number" min="3" max="20" value="10" inputmode="numeric"><span class="u">ก้าน</span></div>
+  <div class="row"><label>ช่องทีวี (UHF)</label><select id="ch"></select></div>
+  <div class="row"><label>ระยะถึงเสาส่ง</label><input id="dist" type="number" min="0.5" step="any" value="20" inputmode="decimal"><span class="u">km</span></div>
+  <div class="row"><label>กำลังส่ง ERP</label><input id="erp" type="number" min="0.01" step="any" value="10" inputmode="decimal"><span class="u">kW</span></div>
+  <div class="row"><label>ความสูญเสียเพิ่ม</label><input id="ex" type="number" min="0" max="60" step="any" value="12" inputmode="decimal"><span class="u">dB</span></div>
+  <div class="row"><label>สายนำสัญญาณ</label><input id="cab" type="number" min="0" step="any" value="15" inputmode="decimal"><span class="u">m</span></div>
+  <div class="note">ความสูญเสียเพิ่ม = ต้นไม้ อาคารบัง ฝน ฯลฯ นอกเหนือจากการสูญเสียในอวกาศว่าง สาย RG-6 คิดประมาณ 7 dB ต่อ 100 m</div>
+</div>
+
+<div class="card">
+  <h2>การหันเสา</h2>
+  <canvas id="cv" width="440" height="440"></canvas>
+  <div style="margin-top:6px">หันเสาคลาดจากทิศเสาส่ง: <span class="big" id="ev">0°</span></div>
+  <input id="er" type="range" min="-90" max="90" step="1" value="0">
+  <div class="note">เส้นประส้ม = ทิศเสาส่ง (ด้านบน) กลีบสีฟ้า = ทิศที่เสารับของเราไวที่สุด</div>
+</div>
+
+<div class="card">
+  <h2>ผลลัพธ์</h2>
+  <div class="status" id="stt"></div>
+  <div class="grid">
+    <div><span>ความถี่กลางช่อง</span><b id="fc"></b></div>
+    <div><span>อัตราขยายเสา (ทิศหลัก)</span><b id="g0"></b></div>
+    <div><span>ความกว้างลำ (−3 dB)</span><b id="bw"></b></div>
+    <div><span>อัตราส่วนหน้าต่อหลัง (F/B)</span><b id="fb"></b></div>
+  </div>
+</div>
+
+<div class="card scroll">
+  <h2>งบสัญญาณ (Link Budget)</h2>
+  <table id="lb"></table>
+</div>
+
+<div class="card scroll">
+  <h2>ขนาดก้านเสาโดยประมาณ ณ ช่องที่เลือก</h2>
+  <table id="dm"></table>
+  <div class="note" style="margin-top:6px">คำนวณจากสูตรประมาณการเบื้องต้น ใช้เป็นจุดเริ่มต้นเท่านั้น เสาจริงต้องปรับจูนด้วยโปรแกรม NEC/4nec2 หรือเครื่องวัด SWR</div>
+</div>
+
+<div class="card note">
+  <b>ข้อมูลอ้างอิงระบบ:</b> ไทยใช้มาตรฐาน DVB-T2 (16k ext, GI 19/128, 64-QAM, CR 3/5 ประมาณ 21.9 Mbps ต่อมัลติเพล็กซ์) ตามเอกสาร กสทช. ย่านรับชมหลักคือ UHF 510–694 MHz (ช่อง 26–48) ช่องที่ใช้จริงต่างกันตามพื้นที่ ตรวจสอบกับ กสทช. หรือผู้ให้บริการในพื้นที่ก่อนติดตั้ง
+  <br><b>ข้อจำกัด:</b> อัตราขยายและแพทเทิร์นมาจากสูตรประมาณการ ไม่ใช่การคำนวณแม่เหล็กไฟฟ้าเต็มรูปแบบ ไม่รวมกลีบข้างละเอียด สัญญาณสะท้อน หรือสัญญาณรบกวน ค่าเริ่มต้นของ ERP และความสูญเสียเพิ่มเป็นข้อสมมติ
+</div>
+</main>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var cv=$('cv'),cx=cv.getContext('2d');
+var sel=$('ch');
+for(var c=26;c<=48;c++){var o=document.createElement('option');o.value=c;o.textContent='ช่อง '+c+' ('+(474+8*(c-21))+' MHz)';sel.appendChild(o)}
+sel.value=34;
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function P(){
+  var N=Math.max(3,Math.min(20,Math.round(+$('N').value)||10));
+  var ch=+$('ch').value,f=474+8*(ch-21);
+  var G0=10*Math.log10(N)+2.7-2.5*Math.pow((f-600)/92,2);
+  var D=Math.pow(10,G0/10);
+  var bw=Math.max(20,Math.min(120,0.9*Math.sqrt(41253/D)));
+  var fb=Math.min(28,12+1.2*N);
+  return{N:N,ch:ch,f:f,G0:G0,bw:bw,fb:fb,e:+$('er').value,
+    dist:Math.max(0.1,+$('dist').value||20),erp:Math.max(1e-4,+$('erp').value||10),ex:+$('ex').value||0,cab:+$('cab').value||0};
+}
+function pat(a,p){ // relative linear power, a = angle from antenna axis (deg)
+  a=((a+180)%360+360)%360-180;
+  var aa=Math.abs(a),r=aa*Math.PI/180;
+  var m=Math.log(0.5)/Math.log(Math.cos(p.bw/2*Math.PI/180));
+  var v=aa<90?Math.pow(Math.cos(r),m):0;
+  var back=Math.pow(10,-p.fb/10)*Math.pow(Math.max(0,-Math.cos(r)),2);
+  return Math.max(v,back,Math.pow(10,-2.5));
+}
+function row(a,b){return '<tr><td>'+a+'</td><td>'+b+'</td></tr>'}
+function draw(){
+  var p=P(),W=cv.width,H=cv.height,ox=W/2,oy=H/2,R=W/2-34;
+  cx.clearRect(0,0,W,H);
+  var grid=css('--grid'),mut=css('--mut'),ac=css('--ac'),wn=css('--wn');
+  cx.lineWidth=1;cx.strokeStyle=grid;cx.fillStyle=mut;cx.font='12px sans-serif';
+  for(var r=1;r<=3;r++){cx.beginPath();cx.arc(ox,oy,R*r/3,0,2*Math.PI);cx.stroke();cx.fillText(((r-3)*10)+' dB',ox+3,oy-R*r/3+12)}
+  cx.textAlign='center';
+  for(var a=0;a<360;a+=45){var t=a*Math.PI/180;cx.beginPath();cx.moveTo(ox,oy);cx.lineTo(ox+R*Math.sin(t),oy-R*Math.cos(t));cx.stroke();
+    if(a%90===0&&a>0)cx.fillText(a+'°',ox+(R+16)*Math.sin(t),oy-(R+10)*Math.cos(t)+4)}
+  cx.textAlign='left';
+  // pattern
+  cx.beginPath();
+  for(var i=0;i<=720;i++){
+    var th=i*0.5,v=pat(th-p.e,p),db=Math.max(-30,10*Math.log10(v)),rr=(db+30)/30*R,tt=th*Math.PI/180;
+    var x=ox+rr*Math.sin(tt),y=oy-rr*Math.cos(tt);
+    if(i===0)cx.moveTo(x,y);else cx.lineTo(x,y);
+  }
+  cx.closePath();cx.globalAlpha=0.18;cx.fillStyle=ac;cx.fill();cx.globalAlpha=1;
+  cx.strokeStyle=ac;cx.lineWidth=2.2;cx.stroke();
+  // Tx line
+  cx.setLineDash([6,5]);cx.strokeStyle=wn;cx.lineWidth=1.6;cx.beginPath();cx.moveTo(ox,oy);cx.lineTo(ox,oy-R);cx.stroke();cx.setLineDash([]);
+  cx.fillStyle=wn;cx.beginPath();cx.arc(ox,oy-R,5,0,2*Math.PI);cx.fill();
+  cx.fillText('เสาส่ง',ox+8,oy-R+4);
+  cx.fillStyle=mut;cx.beginPath();cx.arc(ox,oy,4,0,2*Math.PI);cx.fill();
+  cx.fillStyle=mut;cx.fillText('เสารับ',ox+8,oy+16);
+}
+function update(){
+  var p=P();
+  $('ev').textContent=p.e+'°';
+  $('fc').textContent=p.f+' MHz';
+  $('g0').textContent=p.G0.toFixed(1)+' dBi';
+  $('bw').textContent=p.bw.toFixed(0)+'°';
+  $('fb').textContent=p.fb.toFixed(0)+' dB';
+  draw();
+  // link budget
+  var eirp=10*Math.log10(p.erp*1000)+30+2.15; // dBm
+  var fspl=32.44+20*Math.log10(p.f)+20*Math.log10(p.dist);
+  var gErr=10*Math.log10(pat(-p.e,p));
+  var gAnt=p.G0+gErr;
+  var cab=0.07*p.cab;
+  var pr=eirp-fspl-p.ex+gAnt-cab;
+  var noise=-174+10*Math.log10(7.61e6)+6;
+  var req=noise+13;
+  var mg=pr-req;
+  var h='';
+  h+=row('กำลังแพร่คลื่น EIRP',eirp.toFixed(1)+' dBm');
+  h+=row('สูญเสียในอวกาศว่าง (FSPL)','−'+fspl.toFixed(1)+' dB');
+  h+=row('สูญเสียเพิ่ม (สิ่งกีดขวาง)','−'+p.ex.toFixed(1)+' dB');
+  h+=row('อัตราขยายเสา ณ ทิศเสาส่ง',(gAnt>=0?'+':'')+gAnt.toFixed(1)+' dBi');
+  h+=row('&nbsp;&nbsp;(เสียจากหันคลาด)',gErr.toFixed(1)+' dB');
+  h+=row('สูญเสียในสาย','−'+cab.toFixed(1)+' dB');
+  h+=row('<b>สัญญาณเข้าเครื่องรับ</b>','<b>'+pr.toFixed(1)+' dBm</b>');
+  h+=row('ขั้นต่ำที่ต้องการ (ประมาณ)',req.toFixed(1)+' dBm');
+  h+=row('<b>ส่วนเผื่อ (Margin)</b>','<b>'+(mg>=0?'+':'')+mg.toFixed(1)+' dB</b>');
+  $('lb').innerHTML=h;
+  var s=$('stt'),m;
+  if(mg>=10){m='✓ ดีมาก: รับได้เสถียร';s.style.color=css('--ok')}
+  else if(mg>=3){m='◐ พอรับได้: อาจหลุดช่วงฝนหรืออากาศแปรปรวน';s.style.color=css('--wn')}
+  else if(mg>=0){m='⚠ ริม ๆ ขีดจำกัด: ภาพอาจกระตุกบ่อย';s.style.color=css('--wn')}
+  else{m='✗ สัญญาณไม่พอ: ภาพแตกหรือไม่ติด';s.style.color=css('--bad')}
+  s.textContent=m+' ('+(mg>=0?'+':'')+mg.toFixed(1)+' dB)';
+  // dimensions
+  var lam=299.79/p.f*100; // cm
+  var t='<tr><th>ก้าน</th><th>ความยาว (cm)</th><th>ตำแหน่งจากตัวสะท้อน (cm)</th></tr>';
+  var pos=0;
+  t+='<tr><td>ตัวสะท้อน</td><td>'+(0.495*lam).toFixed(1)+'</td><td>0</td></tr>';
+  pos=0.20*lam;
+  t+='<tr><td>ตัวขับ (dipole)</td><td>'+(0.473*lam).toFixed(1)+'</td><td>'+pos.toFixed(1)+'</td></tr>';
+  pos+=0.125*lam;
+  for(var k=1;k<=p.N-2;k++){
+    var L=Math.max(0.38,0.44-0.005*(k-1))*lam;
+    t+='<tr><td>ตัวนำ '+k+'</td><td>'+L.toFixed(1)+'</td><td>'+pos.toFixed(1)+'</td></tr>';
+    pos+=0.30*lam;
+  }
+  $('dm').innerHTML=t;
+}
+['N','ch','dist','erp','ex','cab','er'].forEach(function(i){$(i).addEventListener('input',update);$(i).addEventListener('change',update)});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',update);
+update();
+})();
+</script>
+</body>
+</html>
